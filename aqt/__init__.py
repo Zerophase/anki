@@ -263,6 +263,7 @@ def _run(argv=None, exec=True):
         QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 
     # create the app
+    argv += [" --remote-debugging-port=6969"]
     app = AnkiApp(argv)
     QCoreApplication.setApplicationName("Anki")
     if app.secondInstance():

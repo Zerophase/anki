@@ -4,7 +4,9 @@
 
 from aqt.utils import openLink, shortcut, tooltip, askUserDialog
 from anki.utils import isMac
+from aqt.qt import *
 import aqt
+# from aqt.webview import UrlInterceptor
 from anki.sound import clearAudioQueue
 
 class Overview:

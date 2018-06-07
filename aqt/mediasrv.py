@@ -8,7 +8,6 @@ import http.server
 import socketserver
 import socket
 from anki.utils import devMode
-import threading
 
 # locate web folder in source/binary distribution
 def _getExportFolder():
@@ -24,6 +23,7 @@ def _getExportFolder():
       raise Exception("couldn't find web folder")
 
 _exportFolder = _getExportFolder()
+
 
 # webengine on windows sometimes opens a connection and fails to send a request,
 # which will hang the server if unthreaded
@@ -42,22 +42,20 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
             self.server_name = "server"
         self.server_port = port
 
-class MediaServer(threading.Thread):
 
-    _port = None
-    _ready = threading.Event()
+class MediaServer(QThread):
+
+    _server = None
 
     def run(self):
-        self.server = ThreadedHTTPServer(("127.0.0.1", 0), RequestHandler)
-        self._ready.set()
-        self.server.serve_forever()
+        self._server = ThreadedHTTPServer(("127.0.0.1", 0), RequestHandler)
+        self._server.serve_forever()
 
     def getPort(self):
-        self._ready.wait()
-        return self.server.server_port
+        return self._server.server_port
 
     def shutdown(self):
-        self.server.shutdown()
+        self._server.shutdown()
 
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
@@ -65,6 +63,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         f = self.send_head()
+        print("Get------------------------")
         if f:
             try:
                 self.copyfile(f, self.wfile)
@@ -80,8 +79,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 f.close()
 
     def send_head(self):
+        from aqt import mw
+        if mw.inMainThread():
+            print("In main trhead")
+        print("file path: " + self.path)
         path = self.translate_path(self.path)
         path = self._redirectWebExports(path)
+
         if os.path.isdir(path):
             self.send_error(HTTPStatus.NOT_FOUND, "File not found")
             return None

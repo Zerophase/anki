@@ -457,7 +457,7 @@ from the profile screen."))
     ##########################################################################
 
     def moveToState(self, state, *args):
-        #print("-> move from", self.state, "to", state)
+        print("-> move from", self.state, "to", state)
         oldState = self.state or "dummy"
         cleanup = getattr(self, "_"+oldState+"Cleanup", None)
         if cleanup:

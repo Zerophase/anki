@@ -12,7 +12,29 @@ from anki.utils import isMac, isWin, isLin, devMode
 # Page for debug messages
 ##########################################################################
 
+
+#TODO Looks UrlInterceptor will have to replace AcceptNavigation Request
+# class UrlInterceptor(QWebEngineUrlRequestInterceptor):
+#
+#     def __init__(self, parent=None):
+#         QWebEngineUrlRequestInterceptor.__init__(self, parent=parent)
+#
+#     timeshit = 0
+#
+#     def interceptRequest(self, info):
+#         # if info == QWebEngineUrlRequestInfo.
+#         url = info.requestUrl()
+#         urlstr = url.toString()
+#         # UrlInterceptor.timeshit += 1
+#         from aqt import mw
+#         if url.scheme() == "data" or urlstr.startswith(mw.serverURL()) or ".css" in urlstr or ".js" in urlstr:
+#             return None
+#         openLink(url)
+
+
 class AnkiWebPage(QWebEnginePage):
+
+    # urlInterceptor = None
 
     def __init__(self, onBridgeCmd):
         QWebEnginePage.__init__(self)
@@ -24,6 +46,7 @@ class AnkiWebPage(QWebEnginePage):
         class Bridge(QObject):
             @pyqtSlot(str, result=str)
             def cmd(self, str):
+                # self.parent().thread()
                 return json.dumps(self.onCmd(str))
 
         self._bridge = Bridge()
@@ -31,7 +54,8 @@ class AnkiWebPage(QWebEnginePage):
 
         self._channel = QWebChannel(self)
         self._channel.registerObject("py", self._bridge)
-        self.setWebChannel(self._channel)
+        self.setWebChannel(self._channel, QWebEngineScript.MainWorld)
+
 
         js = QFile(':/qtwebchannel/qwebchannel.js')
         assert js.open(QIODevice.ReadOnly)
@@ -42,14 +66,17 @@ class AnkiWebPage(QWebEnginePage):
             var pycmd;
             new QWebChannel(qt.webChannelTransport, function(channel) {
                 pycmd = function (arg, cb) {
+                    console.log("arg: " + arg);
+                    console.log("cb: " + cb);
                     var resultCB = function (res) {
                         // pass result back to user-provided callback
                         if (cb) {
+                            console.log("res: " + res);
                             cb(JSON.parse(res));
                         }
                     }
-                
-                    channel.objects.py.cmd(arg, resultCB);                   
+
+                    channel.objects.py.cmd(arg, resultCB);
                 }
                 pycmd("domDone");
             });
@@ -58,6 +85,9 @@ class AnkiWebPage(QWebEnginePage):
         script.setInjectionPoint(QWebEngineScript.DocumentReady)
         script.setRunsOnSubFrames(False)
         self.profile().scripts().insert(script)
+        # if AnkiWebPage.urlInterceptor is None:
+        #     AnkiWebPage.urlInterceptor = UrlInterceptor()
+        #     self.profile().setRequestInterceptor(AnkiWebPage.urlInterceptor)
 
     def javaScriptConsoleMessage(self, lvl, msg, line, srcID):
         # not translated because console usually not visible,
@@ -70,8 +100,13 @@ class AnkiWebPage(QWebEnginePage):
             return True
         from aqt import mw
         # ignore href=#
-        if url.toString().startswith(mw.serverURL()):
-            return False
+        if "bottom toolbar" in url.toString():
+            return True
+        if url.scheme() == "data":
+            return True
+        url = url.toString()
+        if url.startswith(mw.serverURL()):
+            return True
         # load all other links in browser
         openLink(url)
         return False
@@ -81,6 +116,7 @@ class AnkiWebPage(QWebEnginePage):
 
 # Main web view
 ##########################################################################
+
 
 class AnkiWebView(QWebEngineView):
 
@@ -111,6 +147,7 @@ class AnkiWebView(QWebEngineView):
             QShortcut(QKeySequence("ctrl+shift+v"), self,
                       context=Qt.WidgetWithChildrenShortcut, activated=self.onPaste)
 
+        self.setFocusProxy(QQuickWidget())
         self.focusProxy().installEventFilter(self)
 
     def eventFilter(self, obj, evt):
@@ -232,7 +269,7 @@ border-radius:5px; font-family: Helvetica }"""
         jstxt = "\n".join([self.bundledScript("webview.js")]+
                           [self.bundledScript(fname) for fname in js])
         from aqt import mw
-        head =  mw.baseHTML() + head + csstxt + jstxt
+        head = mw.baseHTML() + head + csstxt + jstxt
 
         html = """
 <!doctype html>
@@ -249,7 +286,7 @@ body {{ zoom: {}; {} }}
 
 <body>{}</body>
 </html>""".format(self.title, self.zoomFactor(), fontspec, buttonspec, head, body)
-        #print(html)
+        # print(html)
         self.setHtml(html)
 
     def webBundlePath(self, path):
@@ -257,7 +294,8 @@ body {{ zoom: {}; {} }}
         return "http://localhost:%d/_anki/%s" % (mw.mediaServer.getPort(), path)
 
     def bundledScript(self, fname):
-        return '<script src="%s"></script>' % self.webBundlePath(fname)
+        return '<script charset="UTF-8" src="%s"></script>' % self.webBundlePath(fname)
+
 
     def bundledCSS(self, fname):
         return '<link rel="stylesheet" type="text/css" href="%s">' % self.webBundlePath(fname)
